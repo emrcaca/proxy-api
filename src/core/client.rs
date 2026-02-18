@@ -9,13 +9,20 @@ use crate::core::Config;
 pub struct OpenAiClient {
     client: Client,
     config: Config,
+    chat_completions_url: String,
+    models_url: String,
 }
 
 impl OpenAiClient {
     pub fn new(config: Config) -> Self {
+        let base = config.openai_base_url.trim_end_matches('/');
+        let chat_completions_url = format!("{}/chat/completions", base);
+        let models_url = format!("{}/models", base);
         Self {
             client: Client::new(),
             config,
+            chat_completions_url,
+            models_url,
         }
     }
 
@@ -23,33 +30,34 @@ impl OpenAiClient {
         &self,
         body: serde_json::Value,
     ) -> Result<Response, reqwest::Error> {
-        let base = self.config.openai_base_url.trim_end_matches('/');
-        let url = format!("{}/chat/completions", base);
-
         self.client
-            .post(&url)
+            .post(&self.chat_completions_url)
             .header("Content-Type", "application/json")
-            .header("Authorization", format!("Bearer {}", self.config.openai_api_key))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.config.openai_api_key),
+            )
             .json(&body)
             .send()
             .await
     }
 
     pub async fn check_connection(&self) -> Result<(), reqwest::Error> {
-        let base = self.config.openai_base_url.trim_end_matches('/');
-        let url = format!("{}/models", base);
-
         // Try to list models as a connection check
-        let response = self.client
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", self.config.openai_api_key))
+        let response = self
+            .client
+            .get(&self.models_url)
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.config.openai_api_key),
+            )
             .send()
             .await?;
 
         if response.status().is_success() {
             Ok(())
         } else {
-            // Even if it returns 401/404, the API is reachable. 
+            // Even if it returns 401/404, the API is reachable.
             // Only return error if we can't reach the server at all.
             Ok(())
         }

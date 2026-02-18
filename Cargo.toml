@@ -20,3 +20,5 @@ serde_yaml = "0.9.34"
 nu-ansi-term = "0.50.3"
 windows-sys = { version = "0.61.2", features = ["Win32_System_Console", "Win32_UI_WindowsAndMessaging"] }
 directories = "6.0.0"
+sha2 = "0.10"
+base64 = "0.22"

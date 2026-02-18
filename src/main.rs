@@ -1,5 +1,6 @@
-mod core;
 mod api;
+mod common;
+mod core;
 
 use axum::{
     routing::{get, post},
@@ -10,8 +11,8 @@ use tower_http::cors::CorsLayer;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
-use crate::core::{Config, OpenAiClient};
 use crate::api::routes;
+use crate::core::{Config, OpenAiClient};
 
 #[cfg(windows)]
 fn hide_console() {
@@ -29,11 +30,11 @@ async fn main() {
     let is_debug = args.iter().any(|arg| arg == "-debug");
 
     if !is_debug {
-        // Enable ANSI support first so if it's visible it works, 
+        // Enable ANSI support first so if it's visible it works,
         // but then hide it if not in debug mode
         #[cfg(windows)]
         let _ = nu_ansi_term::enable_ansi_support();
-        
+
         #[cfg(windows)]
         hide_console();
     } else {
@@ -75,7 +76,10 @@ async fn main() {
         // Health check
         .route("/health", get(health))
         // OpenAI-compatible endpoint
-        .route("/v1/chat/completions", post(routes::openai::chat_completions))
+        .route(
+            "/v1/chat/completions",
+            post(routes::openai::chat_completions),
+        )
         // Anthropic-compatible endpoint
         .route("/v1/messages", post(routes::anthropic::messages))
         .layer(CorsLayer::permissive())

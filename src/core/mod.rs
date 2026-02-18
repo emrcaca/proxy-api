@@ -1,5 +1,5 @@
-pub mod config;
 pub mod client;
+pub mod config;
 
-pub use config::Config;
 pub use client::OpenAiClient;
+pub use config::Config;

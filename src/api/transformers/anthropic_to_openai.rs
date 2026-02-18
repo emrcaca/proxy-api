@@ -1,11 +1,18 @@
+use crate::common::content_utils::extract_text_from_blocks;
 use serde_json::{json, Value};
 use tracing::debug;
 
 /// Transforms an Anthropic Messages API request into an OpenAI-compatible request for the upstream API.
 pub fn transform_request(anthropic_body: &Value) -> Value {
     let model = anthropic_body.get("model").cloned().unwrap_or(json!(""));
-    let max_tokens = anthropic_body.get("max_tokens").cloned().unwrap_or(json!(1024));
-    let stream = anthropic_body.get("stream").cloned().unwrap_or(json!(false));
+    let max_tokens = anthropic_body
+        .get("max_tokens")
+        .cloned()
+        .unwrap_or(json!(1024));
+    let stream = anthropic_body
+        .get("stream")
+        .cloned()
+        .unwrap_or(json!(false));
 
     let mut openai_messages: Vec<Value> = Vec::new();
 
@@ -20,17 +27,7 @@ pub fn transform_request(anthropic_body: &Value) -> Value {
             }
             Value::Array(blocks) => {
                 // Anthropic system can be array of content blocks
-                let text: String = blocks
-                    .iter()
-                    .filter_map(|b| {
-                        if b.get("type").and_then(|t| t.as_str()) == Some("text") {
-                            b.get("text").and_then(|t| t.as_str()).map(|s| s.to_string())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                let text = extract_text_from_blocks(blocks);
                 if !text.is_empty() {
                     openai_messages.push(json!({
                         "role": "system",
@@ -154,7 +151,10 @@ fn convert_content_blocks(role: &str, blocks: &[Value], messages: &mut Vec<Value
                     }
                     "image" => {
                         if let Some(source) = block.get("source") {
-                            let media_type = source.get("media_type").and_then(|m| m.as_str()).unwrap_or("image/png");
+                            let media_type = source
+                                .get("media_type")
+                                .and_then(|m| m.as_str())
+                                .unwrap_or("image/png");
                             let data = source.get("data").and_then(|d| d.as_str()).unwrap_or("");
                             parts.push(json!({
                                 "type": "image_url",
@@ -166,21 +166,13 @@ fn convert_content_blocks(role: &str, blocks: &[Value], messages: &mut Vec<Value
                     }
                     "tool_result" => {
                         // Tool results from user go as separate tool messages
-                        let tool_use_id = block.get("tool_use_id").and_then(|i| i.as_str()).unwrap_or("");
+                        let tool_use_id = block
+                            .get("tool_use_id")
+                            .and_then(|i| i.as_str())
+                            .unwrap_or("");
                         let content = match block.get("content") {
                             Some(Value::String(s)) => s.clone(),
-                            Some(Value::Array(arr)) => {
-                                arr.iter()
-                                    .filter_map(|b| {
-                                        if b.get("type").and_then(|t| t.as_str()) == Some("text") {
-                                            b.get("text").and_then(|t| t.as_str()).map(|s| s.to_string())
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .collect::<Vec<_>>()
-                                    .join("\n")
-                            }
+                            Some(Value::Array(arr)) => extract_text_from_blocks(arr),
                             _ => String::new(),
                         };
 
@@ -255,7 +247,11 @@ fn convert_content_blocks(role: &str, blocks: &[Value], messages: &mut Vec<Value
             // Other roles: just pass text through
             let text: String = blocks
                 .iter()
-                .filter_map(|b| b.get("text").and_then(|t| t.as_str()).map(|s| s.to_string()))
+                .filter_map(|b| {
+                    b.get("text")
+                        .and_then(|t| t.as_str())
+                        .map(|s| s.to_string())
+                })
                 .collect::<Vec<_>>()
                 .join("\n");
             messages.push(json!({

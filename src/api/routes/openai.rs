@@ -13,9 +13,19 @@ pub async fn chat_completions(
     State(client): State<OpenAiClient>,
     Json(body): Json<serde_json::Value>,
 ) -> Response {
-    let model = body.get("model").and_then(|m| m.as_str()).unwrap_or("unknown");
-    let is_stream = body.get("stream").and_then(|s| s.as_bool()).unwrap_or(false);
-    info!(model = model, stream = is_stream, "OpenAI chat completions request");
+    let model = body
+        .get("model")
+        .and_then(|m| m.as_str())
+        .unwrap_or("unknown");
+    let is_stream = body
+        .get("stream")
+        .and_then(|s| s.as_bool())
+        .unwrap_or(false);
+    info!(
+        model = model,
+        stream = is_stream,
+        "OpenAI chat completions request"
+    );
 
     let response = match client.chat_completion(body).await {
         Ok(r) => r,

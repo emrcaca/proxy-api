@@ -9,16 +9,26 @@ use futures::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, info};
 
-use crate::core::OpenAiClient;
 use crate::api::transformers::{anthropic_to_openai, openai_to_anthropic};
+use crate::core::OpenAiClient;
 
 pub async fn messages(
     State(client): State<OpenAiClient>,
     Json(body): Json<serde_json::Value>,
 ) -> Response {
-    let model = body.get("model").and_then(|m| m.as_str()).unwrap_or("unknown");
-    let is_stream = body.get("stream").and_then(|s| s.as_bool()).unwrap_or(false);
-    info!(model = model, stream = is_stream, "Anthropic messages request");
+    let model = body
+        .get("model")
+        .and_then(|m| m.as_str())
+        .unwrap_or("unknown");
+    let is_stream = body
+        .get("stream")
+        .and_then(|s| s.as_bool())
+        .unwrap_or(false);
+    info!(
+        model = model,
+        stream = is_stream,
+        "Anthropic messages request"
+    );
 
     // Transform Anthropic request → OpenAI format
     let openai_body = anthropic_to_openai::transform_request(&body);
@@ -47,7 +57,7 @@ pub async fn messages(
         let status_code = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
         let body_text = response.text().await.unwrap_or_default();
         error!(status = %status_code, body = %body_text, "OpenAI API returned error");
-        
+
         // Try to parse and re-format as Anthropic error
         return (
             status_code,
@@ -71,7 +81,7 @@ pub async fn messages(
 
         tokio::spawn(async move {
             let mut transformer = openai_to_anthropic::StreamTransformer::new(&model_owned);
-            let mut buffer = String::new();
+            let mut buffer = String::with_capacity(8192);
 
             // Send message_start
             let start = transformer.start_event();
@@ -94,8 +104,8 @@ pub async fn messages(
 
                 // Process complete SSE lines
                 while let Some(pos) = buffer.find("\n\n") {
-                    let line = buffer[..pos].to_string();
-                    buffer = buffer[pos + 2..].to_string();
+                    let line = buffer.drain(..pos).collect::<String>();
+                    buffer.drain(..2); // Remove "\n\n"
 
                     for l in line.lines() {
                         if let Some(data) = l.strip_prefix("data: ") {
@@ -121,6 +131,14 @@ pub async fn messages(
                             }
                         }
                     }
+                }
+            }
+
+            // Always send final events to ensure proper stream termination
+            let final_events = transformer.finish();
+            for event in final_events {
+                if tx.send(Ok(event)).await.is_err() {
+                    return;
                 }
             }
         });
